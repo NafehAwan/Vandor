@@ -6,16 +6,16 @@
 
 ## ✨ Features
 
-- 🤖 **AI-Driven Itinerary Generation**: Powered by Groq's `llama-3.3-70b-versatile` model for real-time, grounded travel planning.
-- 💵 **Real-World Price Research**: Itemized daily cost calculations covering accommodation, local culinary experiences, sightseeing tickets, and transit fares.
-- 📐 **Exact Mathematical Subtotals**: Auto-calculated daily totals and category breakdowns with zero synthetic padding.
-- 🔒 **Firebase Authentication**: Secure Google OAuth authentication allowing users to persist custom trips to their profile.
-- ☁️ **Cloud Storage**: Automatic synchronization with Google Cloud Firestore database for saved trip history across devices.
-- 🎨 **Modern Visual Experience**: High-contrast dark canvas, responsive UI with video background fallbacks, and polished micro-interactions using Tailwind CSS and Lucide React icons.
+- **AI-Driven Itinerary Generation**: Powered by Groq's `llama-3.3-70b-versatile` model for real-time, grounded travel planning.
+- **Real-World Price Research**: Itemized daily cost calculations covering accommodation, local culinary experiences, sightseeing tickets, and transit fares.
+- **Exact Mathematical Subtotals**: Auto-calculated daily totals and category breakdowns with zero synthetic padding.
+- **Firebase Authentication**: Secure Google OAuth authentication allowing users to persist custom trips to their profile.
+- **Cloud Storage**: Automatic synchronization with Google Cloud Firestore database for saved trip history across devices.
+- **Modern Visual Experience**: High-contrast dark canvas, responsive UI with video background fallbacks, and polished micro-interactions using Tailwind CSS and Lucide React icons.
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 - **Frontend**: [React 18](https://react.dev/), [TypeScript](https://www.typescriptlang.org/)
 - **Build Tool**: [Vite](https://vitejs.dev/)
@@ -26,7 +26,7 @@
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 
@@ -63,7 +63,7 @@ Ensure you have the following installed on your machine:
 
 ---
 
-## 📋 API Key Configuration
+##  API Key Configuration
 
 Vandor allows users to bring their own **Groq API Key** directly in the interface or via environment variables:
 1. Click the **API Key** badge in the top-right header or when generating a trip.
