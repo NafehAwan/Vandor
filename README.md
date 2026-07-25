@@ -4,7 +4,7 @@
 
 ---
 
-## ✨ Features
+## Features
 
 - **AI-Driven Itinerary Generation**: Powered by Groq's `llama-3.3-70b-versatile` model for real-time, grounded travel planning.
 - **Real-World Price Research**: Itemized daily cost calculations covering accommodation, local culinary experiences, sightseeing tickets, and transit fares.
