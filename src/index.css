@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Geist", sans-serif;
+  --font-display: "Special Elite", serif;
+
+  --color-wandor-dark: #0a0a0a;
+  --color-wandor-text: #1a1a1a;
+  --color-wandor-muted: #767676;
+  --color-wandor-prompt: #905831;
+
+  --color-vandor-dark: #0a0a0a;
+  --color-vandor-text: #1a1a1a;
+  --color-vandor-muted: #767676;
+  --color-vandor-prompt: #905831;
+}
+
+body {
+  font-family: 'Geist', sans-serif;
+  overflow-x: hidden;
+  background: #fff;
+}
+

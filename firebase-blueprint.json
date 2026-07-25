@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 200 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Itinerary": {
+      "title": "Saved Trip Itinerary",
+      "description": "User saved travel itinerary",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "destination": { "type": "string", "maxLength": 200 },
+        "durationDays": { "type": "number" },
+        "totalCostUSD": { "type": "number" },
+        "currency": { "type": "string" },
+        "createdDate": { "type": "string" }
+      },
+      "required": ["userId", "destination"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/users/{userId}/itineraries/{itineraryId}": {
+      "schema": "Itinerary",
+      "description": "User saved trip itineraries"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Vandor",
+  "description": "AI-powered personalized travel itinerary planning app with a full-viewport hero and liquid glass prompt card",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
