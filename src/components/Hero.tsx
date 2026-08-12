@@ -7,10 +7,11 @@ import {
   Utensils, Camera, Trees, Activity, Ticket, Train, Building2, Landmark, Mountain, Sun,
   Share2, Download, Navigation, Map, SunMedium, ShieldCheck, Layers, Award, Copy
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import { UserProfile, ItineraryResult } from '@/types';
 import { auth, googleProvider, signInWithPopup, signOut, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 
 interface NavButtonProps {
   children: React.ReactNode;
@@ -73,6 +74,11 @@ export function Hero() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentItinerary, setCurrentItinerary] = useState<ItineraryResult | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  // Share via link + Shared read-only view State
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isSharedView, setIsSharedView] = useState(false);
 
   // Trip Architect Wizard State
   const [travelersCount, setTravelersCount] = useState<number>(2);
@@ -171,7 +177,7 @@ Generated with Vandor AI Travel Architect`;
           const itinerariesSnap = await getDocs(collection(db, 'users', firebaseUser.uid, 'itineraries'));
           const fetchedTrips: ItineraryResult[] = [];
           itinerariesSnap.forEach((docSnap) => {
-            fetchedTrips.push(docSnap.data() as ItineraryResult);
+            fetchedTrips.push({ ...(docSnap.data() as ItineraryResult), id: docSnap.id });
           });
           if (fetchedTrips.length > 0) {
             setSavedTrips(fetchedTrips);
@@ -187,6 +193,34 @@ Generated with Vandor AI Travel Architect`;
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // Load a shared itinerary when the page is opened via a ?trip=<shareId> link
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tripId = params.get('trip');
+    if (!tripId) return;
+
+    setIsSharedView(true);
+    setActiveModal('itinerary');
+    setIsGenerating(true);
+    setApiError(null);
+
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'shared', tripId));
+        if (snap.exists()) {
+          setCurrentItinerary(snap.data() as ItineraryResult);
+        } else {
+          setApiError('This shared itinerary link is invalid or no longer exists.');
+        }
+      } catch (err) {
+        console.error('Error loading shared itinerary:', err);
+        setApiError('Could not load the shared itinerary. Please check your connection and try again.');
+      } finally {
+        setIsGenerating(false);
+      }
+    })();
   }, []);
 
   // Sync Groq Key to LocalStorage
@@ -490,15 +524,19 @@ Return ONLY a valid, raw JSON object matching this schema:
 
   const handleSaveCurrentItinerary = async () => {
     if (!currentItinerary) return;
-    const updated = [currentItinerary, ...savedTrips];
+    const itineraryId = currentItinerary.id || `trip_${Date.now()}`;
+    const tripWithId: ItineraryResult = { ...currentItinerary, id: itineraryId };
+
+    // Persist to browser memory (works for guests & offline too)
+    const updated = [tripWithId, ...savedTrips.filter((t) => t.id !== itineraryId)];
     setSavedTrips(updated);
     localStorage.setItem('vandor_saved_trips', JSON.stringify(updated));
 
-    if (user?.uid) {
+    // Sync to Firebase Firestore for signed-in users (cross-device memory)
+    if (user?.uid && user.provider !== 'guest') {
       try {
-        const itineraryId = `trip_${Date.now()}`;
         await setDoc(doc(db, 'users', user.uid, 'itineraries', itineraryId), {
-          ...currentItinerary,
+          ...tripWithId,
           userId: user.uid,
         });
       } catch (err) {
@@ -507,6 +545,152 @@ Return ONLY a valid, raw JSON object matching this schema:
     }
 
     setActiveModal('savedTrips');
+  };
+
+  const handleDeleteSavedTrip = async (trip: ItineraryResult) => {
+    const updated = savedTrips.filter((t) => t !== trip);
+    setSavedTrips(updated);
+    localStorage.setItem('vandor_saved_trips', JSON.stringify(updated));
+
+    if (user?.uid && user.provider !== 'guest' && trip.id) {
+      try {
+        await deleteDoc(doc(db, 'users', user.uid, 'itineraries', trip.id));
+      } catch (err) {
+        console.error('Error deleting itinerary from Firestore:', err);
+      }
+    }
+    showToast('Trip removed from your memory.');
+  };
+
+  // Export any itinerary to a downloadable PDF document (client-side, no server)
+  const handleExportPDF = (trip: ItineraryResult) => {
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 48;
+    let y = margin;
+
+    const ensureSpace = (needed: number) => {
+      if (y + needed > pageH - margin) {
+        pdf.addPage();
+        y = margin;
+      }
+    };
+
+    // Title block
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(22);
+    pdf.setTextColor(20);
+    pdf.text('Vandor AI Travel Itinerary', margin, y);
+    y += 26;
+
+    pdf.setFontSize(15);
+    pdf.setTextColor(60);
+    const destLines = pdf.splitTextToSize(trip.destination, pageW - margin * 2);
+    pdf.text(destLines, margin, y);
+    y += destLines.length * 18 + 4;
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.setTextColor(110);
+    pdf.text(
+      `${trip.durationDays} Days   •   Total: ${formatMoney(trip.totalCostUSD)}   •   Created ${trip.createdDate}`,
+      margin,
+      y
+    );
+    y += 16;
+    pdf.text(
+      `Stay ${formatMoney(trip.categoryBreakdown.stay)}    Food ${formatMoney(trip.categoryBreakdown.food)}    Sights ${formatMoney(trip.categoryBreakdown.activities)}    Transit ${formatMoney(trip.categoryBreakdown.transit)}`,
+      margin,
+      y
+    );
+    y += 14;
+    pdf.setDrawColor(220);
+    pdf.line(margin, y, pageW - margin, y);
+    y += 22;
+
+    // Day-by-day
+    trip.days.forEach((day) => {
+      ensureSpace(44);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(12);
+      pdf.setTextColor(20);
+      const header = `Day ${day.dayNumber}: ${day.dayTitle}`;
+      const headerLines = pdf.splitTextToSize(header, pageW - margin * 2 - 90);
+      pdf.text(headerLines, margin, y);
+      pdf.setFontSize(10);
+      pdf.setTextColor(150, 110, 20);
+      pdf.text(formatMoney(day.totalDayCostUSD), pageW - margin, y, { align: 'right' });
+      y += headerLines.length * 14 + 4;
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9.5);
+      pdf.setTextColor(80);
+      day.highlights.forEach((h) => {
+        const lines = pdf.splitTextToSize(`•  ${h}`, pageW - margin * 2 - 12);
+        ensureSpace(lines.length * 13 + 4);
+        pdf.text(lines, margin + 10, y);
+        y += lines.length * 13 + 2;
+      });
+
+      ensureSpace(18);
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(130);
+      pdf.text(
+        `Stay ${formatMoney(day.breakdown.stay)}   ·   Food ${formatMoney(day.breakdown.food)}   ·   Sights ${formatMoney(day.breakdown.activities)}   ·   Transit ${formatMoney(day.breakdown.transit)}`,
+        margin + 10,
+        y
+      );
+      y += 22;
+    });
+
+    // Footer on every page
+    const pageCount = pdf.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(8);
+      pdf.setTextColor(160);
+      pdf.text('Generated with Vandor AI Travel Architect', margin, pageH - 24);
+      pdf.text(`Page ${i} of ${pageCount}`, pageW - margin, pageH - 24, { align: 'right' });
+    }
+
+    const safeName = trip.destination.replace(/[^a-z0-9]+/gi, '_').slice(0, 40) || 'itinerary';
+    pdf.save(`Vandor_${safeName}.pdf`);
+    showToast('Itinerary exported as PDF!');
+  };
+
+  // Create a public, shareable link backed by Firebase Firestore
+  const handleShareTrip = async (trip: ItineraryResult) => {
+    setIsSharing(true);
+    setShareUrl(null);
+    try {
+      const shareId = `share_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await setDoc(doc(db, 'shared', shareId), {
+        destination: trip.destination,
+        durationDays: trip.durationDays,
+        totalCostUSD: trip.totalCostUSD,
+        currency: trip.currency,
+        categoryBreakdown: trip.categoryBreakdown,
+        days: trip.days,
+        createdDate: trip.createdDate,
+        createdAt: new Date().toISOString(),
+        sharedBy: user?.name || 'Anonymous Explorer',
+      });
+
+      const url = `${window.location.origin}${window.location.pathname}?trip=${shareId}`;
+      setShareUrl(url);
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast('Share link copied to clipboard!');
+      } catch {
+        showToast('Share link created — copy it below.');
+      }
+    } catch (err) {
+      console.error('Error creating share link:', err);
+      showToast('Could not create share link. Please try again.');
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   return (
@@ -746,6 +930,18 @@ Return ONLY a valid, raw JSON object matching this schema:
           </p>
         </div>
       </div>
+
+      {/* Global Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-3 bg-black text-white text-xs font-semibold rounded-xl flex items-center gap-3 shadow-2xl animate-fade-in max-w-[90vw]">
+          <span className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" /> {toastMessage}
+          </span>
+          <button type="button" onClick={() => setToastMessage(null)} className="text-gray-400 hover:text-white flex-shrink-0">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* MODAL DIALOGS */}
       {activeModal && (
@@ -1355,8 +1551,71 @@ Return ONLY a valid, raw JSON object matching this schema:
                           <div className="flex items-center gap-1.5"><Ticket className="w-3.5 h-3.5 text-gray-400" /> Sights: ${trip.categoryBreakdown.activities}</div>
                           <div className="flex items-center gap-1.5"><Train className="w-3.5 h-3.5 text-gray-400" /> Transit: ${trip.categoryBreakdown.transit}</div>
                         </div>
+
+                        {/* Per-trip memory actions */}
+                        <div className="flex items-center gap-2 pt-2 border-t border-gray-200 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentItinerary(trip);
+                              setIsSharedView(false);
+                              setShareUrl(null);
+                              setApiError(null);
+                              setIsGenerating(false);
+                              setActiveModal('itinerary');
+                            }}
+                            className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 hover:border-gray-300 text-[11px] font-semibold rounded-full flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <ExternalLink className="w-3 h-3 text-wandor-prompt" /> View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleExportPDF(trip)}
+                            className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 hover:border-gray-300 text-[11px] font-semibold rounded-full flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Download className="w-3 h-3 text-gray-500" /> PDF
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleShareTrip(trip)}
+                            disabled={isSharing}
+                            className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 hover:border-gray-300 text-[11px] font-semibold rounded-full flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                          >
+                            <Share2 className="w-3 h-3 text-gray-500" /> Share
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSavedTrip(trip)}
+                            className="px-3 py-1.5 bg-white border border-gray-200 text-red-600 hover:bg-red-50 hover:border-red-200 text-[11px] font-semibold rounded-full flex items-center gap-1.5 transition-colors cursor-pointer ml-auto"
+                          >
+                            <X className="w-3 h-3" /> Delete
+                          </button>
+                        </div>
                       </div>
                     ))}
+
+                    {shareUrl && (
+                      <div className="p-3 bg-sky-50 border border-sky-200 rounded-2xl flex items-center gap-2 animate-fade-in">
+                        <Share2 className="w-4 h-4 text-sky-600 flex-shrink-0" />
+                        <input
+                          type="text"
+                          readOnly
+                          value={shareUrl}
+                          onFocus={(e) => e.target.select()}
+                          className="flex-1 bg-transparent text-xs text-gray-700 font-mono outline-none min-w-0 truncate"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(shareUrl);
+                            showToast('Share link copied to clipboard!');
+                          }}
+                          className="px-3 py-1.5 bg-black text-white text-[11px] font-semibold rounded-full hover:bg-gray-800 transition-colors flex items-center gap-1 cursor-pointer flex-shrink-0"
+                        >
+                          <Copy className="w-3 h-3" /> Copy
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1399,14 +1658,23 @@ Return ONLY a valid, raw JSON object matching this schema:
                   </div>
                 ) : currentItinerary ? (
                   <div>
-                    {/* Floating Toast Notification */}
-                    {toastMessage && (
-                      <div className="mb-4 p-3 bg-black text-white text-xs font-semibold rounded-xl flex items-center justify-between shadow-lg animate-fade-in">
-                        <span className="flex items-center gap-2">
-                          <Check className="w-4 h-4 text-emerald-400" /> {toastMessage}
-                        </span>
-                        <button type="button" onClick={() => setToastMessage(null)} className="text-gray-400 hover:text-white">
-                          <X className="w-3.5 h-3.5" />
+                    {/* Shared View Banner */}
+                    {isSharedView && (
+                      <div className="mb-4 p-3.5 bg-sky-50 border border-sky-200 rounded-2xl flex items-center justify-between gap-3 flex-wrap">
+                        <p className="text-xs text-sky-900 font-medium flex items-center gap-2">
+                          <Share2 className="w-4 h-4 text-sky-600" />
+                          You're viewing a shared itinerary. Save it to your own memory or plan a fresh trip.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSharedView(false);
+                            setActiveModal(null);
+                            window.history.replaceState({}, '', window.location.pathname);
+                          }}
+                          className="px-3.5 py-1.5 bg-sky-600 text-white text-[11px] font-semibold uppercase tracking-wider rounded-full hover:bg-sky-700 transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Sparkles className="w-3 h-3" /> Plan My Own Trip
                         </button>
                       </div>
                     )}
@@ -1550,9 +1818,33 @@ Return ONLY a valid, raw JSON object matching this schema:
                       ))}
                     </div>
 
-                    {/* Bottom Action Footer with Export & Save */}
+                    {/* Generated Share Link Row */}
+                    {shareUrl && (
+                      <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-2xl flex items-center gap-2 animate-fade-in">
+                        <Share2 className="w-4 h-4 text-wandor-prompt flex-shrink-0" />
+                        <input
+                          type="text"
+                          readOnly
+                          value={shareUrl}
+                          onFocus={(e) => e.target.select()}
+                          className="flex-1 bg-transparent text-xs text-gray-700 font-mono outline-none min-w-0 truncate"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(shareUrl);
+                            showToast('Share link copied to clipboard!');
+                          }}
+                          className="px-3 py-1.5 bg-black text-white text-[11px] font-semibold rounded-full hover:bg-gray-800 transition-colors flex items-center gap-1 cursor-pointer flex-shrink-0"
+                        >
+                          <Copy className="w-3 h-3" /> Copy
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Bottom Action Footer with Export, Share & Save */}
                     <div className="flex items-center justify-between pt-4 border-t flex-wrap gap-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           type="button"
                           onClick={handleCopyItineraryText}
@@ -1560,13 +1852,28 @@ Return ONLY a valid, raw JSON object matching this schema:
                         >
                           <Copy className="w-3.5 h-3.5" /> Copy Text
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => handleExportPDF(currentItinerary)}
+                          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-full transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Download PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleShareTrip(currentItinerary)}
+                          disabled={isSharing}
+                          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-full transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                        >
+                          <Share2 className="w-3.5 h-3.5" /> {isSharing ? 'Creating link…' : 'Share Link'}
+                        </button>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => {
                           handleSaveCurrentItinerary();
-                          showToast('Trip saved to your profile!');
+                          showToast('Trip saved to your memory!');
                         }}
                         className="px-6 py-2.5 bg-black text-white text-xs font-semibold uppercase rounded-full hover:bg-gray-800 transition-colors flex items-center gap-1.5 cursor-pointer"
                       >

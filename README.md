@@ -9,6 +9,9 @@ Live Link: https://vandor.netlify.app/
 - **AI-Driven Itinerary Generation**: Powered by Groq's `llama-3.3-70b-versatile` model for real-time, grounded travel planning.
 - **Real-World Price Research**: Itemized daily cost calculations covering accommodation, local culinary experiences, sightseeing tickets, and transit fares.
 - **Exact Mathematical Subtotals**: Auto-calculated daily totals and category breakdowns with zero synthetic padding.
+- **Trip Memory (Save & Manage)**: Save any generated itinerary to your personal memory, then view, delete, or re-export it later. Trips persist in browser storage for everyone and sync to **Firebase Cloud Firestore** across devices for signed-in users.
+- **PDF Export**: Download any itinerary as a clean, multi-page PDF document (day-by-day plan, highlights, and full budget breakdown) with a single click — generated entirely client-side.
+- **Share via Link**: Publish an itinerary to a shareable, unguessable URL backed by Firestore. Anyone with the `?trip=<id>` link can open a read-only view of the plan — no account required.
 - **Firebase Authentication**: Secure Google OAuth authentication allowing users to persist custom trips to their profile.
 - **Cloud Storage**: Automatic synchronization with Google Cloud Firestore database for saved trip history across devices.
 - **Modern Visual Experience**: High-contrast dark canvas, responsive UI with video background fallbacks, and polished micro-interactions using Tailwind CSS and Lucide React icons.
@@ -23,6 +26,7 @@ Live Link: https://vandor.netlify.app/
 - **Icons**: [Lucide React](https://lucide.dev/)
 - **AI Engine**: [Groq API](https://groq.com/) (Llama 3.3 70B Versatile)
 - **Backend & Auth**: [Firebase Auth](https://firebase.google.com/docs/auth) & [Cloud Firestore](https://firebase.google.com/docs/firestore)
+- **PDF Export**: [jsPDF](https://github.com/parallax/jsPDF) (client-side document generation)
 
 ---
 
@@ -69,6 +73,27 @@ Vandor allows users to bring their own **Groq API Key** directly in the interfac
 1. Click the **API Key** badge in the top-right header or when generating a trip.
 2. Paste your Groq API key (`gsk_...`).
 3. Your key is stored locally in your browser session for privacy and security.
+
+---
+
+## 🧠 Trip Memory, PDF Export & Sharing
+
+Vandor remembers your trips and lets you take them anywhere:
+
+- **Save**: On any generated itinerary, click **Save Itinerary**. The trip is stored in your browser (`localStorage`) and — when signed in with Google — mirrored to Firestore under `users/{uid}/itineraries/{tripId}` so it follows you across devices.
+- **Manage**: Open **My Saved Trips** from the profile menu to **View**, **Download PDF**, **Share**, or **Delete** each saved trip.
+- **Export PDF**: Click **Download PDF** to generate a formatted, multi-page PDF of the itinerary locally in the browser (no server round-trip).
+- **Share**: Click **Share Link** to publish a read-only copy to the public `shared/{shareId}` Firestore collection and copy a link like `https://vandor.netlify.app/?trip=share_...` to your clipboard. Opening that link loads the itinerary in a read-only shared view.
+
+### Firestore Data Model
+
+| Collection | Access | Purpose |
+| --- | --- | --- |
+| `users/{uid}` | owner only | User profile |
+| `users/{uid}/itineraries/{tripId}` | owner only | Private saved trips |
+| `shared/{shareId}` | public read, public immutable create | Shareable read-only itineraries |
+
+Security rules are defined in [`firestore.rules`](./firestore.rules). Shared documents are validated on write and cannot be updated or deleted once created.
 
 ---
 

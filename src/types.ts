@@ -22,6 +22,7 @@ export interface ItineraryDay {
 }
 
 export interface ItineraryResult {
+  id?: string;
   destination: string;
   durationDays: number;
   totalCostUSD: number;

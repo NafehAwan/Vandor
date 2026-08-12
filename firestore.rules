@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // Default deny catch-all
     match /{document=**} {
       allow read, write: if false;
@@ -19,6 +19,16 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    // Basic shape validation for a shared/saved itinerary document.
+    function isValidTrip(data) {
+      return data.destination is string
+        && data.destination.size() <= 300
+        && data.durationDays is number
+        && data.totalCostUSD is number
+        && data.days is list
+        && data.days.size() <= 60;
+    }
+
     match /users/{userId} {
       allow get: if isOwner(userId);
       allow create, update: if isOwner(userId) && isValidId(userId);
@@ -27,6 +37,16 @@ service cloud.firestore {
       match /itineraries/{itineraryId} {
         allow read, write: if isOwner(userId) && isValidId(itineraryId);
       }
+    }
+
+    // Publicly shareable itineraries (accessed via ?trip=<shareId> links).
+    // Anyone can read a share by its unguessable id, and anyone can create
+    // a new share, but shares are immutable once created (no update/delete).
+    match /shared/{shareId} {
+      allow get: if isValidId(shareId);
+      allow list: if false;
+      allow create: if isValidId(shareId) && isValidTrip(request.resource.data);
+      allow update, delete: if false;
     }
   }
 }
