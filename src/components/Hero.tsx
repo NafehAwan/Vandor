@@ -5,7 +5,7 @@ import {
   CreditCard, User, LogOut, Settings, Lock, PieChart, ExternalLink, Bookmark,
   Users, Zap, Coffee, ShoppingBag, Sliders, Plus, Minus, Info, Globe,
   Utensils, Camera, Trees, Activity, Ticket, Train, Building2, Landmark, Mountain, Sun,
-  Share2, Download, Navigation, Map, SunMedium, ShieldCheck, Layers, Award, Copy
+  Share2, Download, Navigation, Map, SunMedium, ShieldCheck, Layers, Award, Copy, Menu
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { UserProfile, ItineraryResult } from '@/types';
@@ -59,6 +59,7 @@ export function Hero() {
     return saved ? JSON.parse(saved) : null;
   });
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   
   // Saved Itineraries State
@@ -198,8 +199,17 @@ Generated with Vandor AI Travel Architect`;
           console.error('Error syncing user data with Firestore:', err);
         }
       } else {
-        setUser(null);
-        localStorage.removeItem('vandor_user');
+        // Firebase reports no signed-in user. Preserve a local guest session
+        // (guests are never Firebase-authenticated) so they keep their saved
+        // trips across reloads; only clear real (Google) sessions.
+        const saved = localStorage.getItem('vandor_user');
+        const parsed = saved ? (JSON.parse(saved) as UserProfile) : null;
+        if (parsed && parsed.provider === 'guest') {
+          setUser(parsed);
+        } else {
+          setUser(null);
+          localStorage.removeItem('vandor_user');
+        }
       }
     });
 
@@ -754,30 +764,64 @@ Return ONLY a valid, raw JSON object matching this schema:
           </div>
 
           {/* Right Group: Groq Key Indicator + Auth Profile + CTA */}
-          <div className="flex items-center gap-4">
-            {/* Groq Key Badge */}
+          <div className="flex items-center gap-4 max-md:gap-2">
+            {/* Groq Key Badge (compact on mobile: icon + status dot only) */}
             <button
               type="button"
               onClick={() => {
                 setTempApiKey(groqApiKey);
                 setActiveModal('groqKey');
               }}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium bg-white/80 backdrop-blur-md border border-gray-200/90 shadow-sm hover:bg-white hover:border-gray-300 transition-all text-gray-800 cursor-pointer active:scale-95"
+              className="flex items-center gap-2 px-3.5 py-1.5 max-md:px-2 max-md:py-2 rounded-full text-xs font-medium bg-white/80 backdrop-blur-md border border-gray-200/90 shadow-sm hover:bg-white hover:border-gray-300 transition-all text-gray-800 cursor-pointer active:scale-95"
               title="Groq AI Engine Status & Key Settings"
+              aria-label="Groq AI engine status and key settings"
             >
+              <Key className={`w-3.5 h-3.5 hidden max-md:block ${groqApiKey ? 'text-emerald-600' : 'text-amber-600'}`} />
               <span className="relative flex h-2 w-2">
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${groqApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${groqApiKey ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
               </span>
-              <span className="font-semibold tracking-tight text-[12px] text-gray-800">{groqApiKey ? 'Groq Llama 3.3' : 'Groq API Key'}</span>
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
-                groqApiKey 
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+              <span className="font-semibold tracking-tight text-[12px] text-gray-800 max-md:hidden">{groqApiKey ? 'Groq Llama 3.3' : 'Groq API Key'}</span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border max-md:hidden ${
+                groqApiKey
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}>
                 {groqApiKey ? 'Active' : 'Setup'}
               </span>
             </button>
+
+            {/* Mobile Menu (Discover / Pricing / FAQs / Login) */}
+            <div className="relative md:hidden">
+              <button
+                type="button"
+                onClick={() => setShowMobileMenu((v) => !v)}
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/80 border border-gray-200 shadow-sm hover:bg-white transition-all active:scale-95"
+                aria-label="Open navigation menu"
+                aria-expanded={showMobileMenu}
+              >
+                {showMobileMenu ? <X className="w-5 h-5 text-gray-700" /> : <Menu className="w-5 h-5 text-gray-700" />}
+              </button>
+
+              {showMobileMenu && (
+                <div className="absolute right-0 mt-2 w-44 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 p-2 z-50 animate-fade-in">
+                  <button type="button" onClick={() => { setShowMobileMenu(false); setActiveModal('discover'); }} className="w-full text-left px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 rounded-xl flex items-center gap-2 transition-colors">
+                    <Compass className="w-3.5 h-3.5 text-wandor-prompt" /> Discover
+                  </button>
+                  <button type="button" onClick={() => { setShowMobileMenu(false); setActiveModal('pricing'); }} className="w-full text-left px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 rounded-xl flex items-center gap-2 transition-colors">
+                    <DollarSign className="w-3.5 h-3.5 text-wandor-prompt" /> Pricing
+                  </button>
+                  <button type="button" onClick={() => { setShowMobileMenu(false); setActiveModal('faqs'); }} className="w-full text-left px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 rounded-xl flex items-center gap-2 transition-colors">
+                    <Info className="w-3.5 h-3.5 text-wandor-prompt" /> FAQs
+                  </button>
+                  {!user && (
+                    <button type="button" onClick={() => { setShowMobileMenu(false); setActiveModal('login'); }} className="w-full text-left px-3 py-2 mt-1 border-t border-gray-100 pt-2 text-xs font-semibold text-gray-900 hover:bg-gray-100 rounded-xl flex items-center gap-2 transition-colors">
+                      <User className="w-3.5 h-3.5 text-gray-500" /> Login
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Auth / Profile Section */}
             {user ? (
@@ -841,7 +885,7 @@ Return ONLY a valid, raw JSON object matching this schema:
             <button
               type="button"
               onClick={handlePlanTrip}
-              className="bg-wandor-dark text-[#fafafa] border-none cursor-pointer font-sans text-[15px] font-medium uppercase tracking-[0.04em] px-5 py-3.5 rounded-full transition-all hover:bg-[#333] active:scale-95 shadow-sm"
+              className="bg-wandor-dark text-[#fafafa] border-none cursor-pointer font-sans text-[15px] max-md:text-[13px] font-medium uppercase tracking-[0.04em] px-5 py-3.5 max-md:px-3.5 max-md:py-2.5 rounded-full transition-all hover:bg-[#333] active:scale-95 shadow-sm whitespace-nowrap"
             >
               Plan My Trip
             </button>
@@ -1497,7 +1541,7 @@ Return ONLY a valid, raw JSON object matching this schema:
                   <button
                     type="button"
                     onClick={handleGoogleLogin}
-                    className="w-full py-3.5 px-4 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 font-medium text-xs text-gray-800 shadow-sm transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-98"
+                    className="w-full py-3.5 px-4 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 font-medium text-xs text-gray-800 shadow-sm transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-95"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />

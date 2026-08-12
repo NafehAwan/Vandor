@@ -21,3 +21,14 @@ body {
   background: #fff;
 }
 
+/* Fade-in used by modals, dropdowns, toasts and share rows.
+   Opacity-only so it never fights elements that also use translate utilities. */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out both;
+}
+
