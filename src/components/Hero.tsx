@@ -161,6 +161,24 @@ Generated with Vandor AI Travel Architect`;
   // Hero Video State
   const [videoError, setVideoError] = useState(false);
 
+  // Mobile detection — evaluated synchronously so the first paint already
+  // picks the light background (no layout flash / no wasted large download).
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Responsive hero image: a small, low-quality crop on phones (fast LCP on
+  // cellular), the full-resolution image on larger screens.
+  const HERO_IMG_BASE =
+    'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop';
+  const heroBg = isMobile ? `${HERO_IMG_BASE}&w=768&q=50` : `${HERO_IMG_BASE}&w=2000&q=80`;
+
   // Sync Firebase Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -720,18 +738,20 @@ Return ONLY a valid, raw JSON object matching this schema:
     <section
       className="relative min-h-svh w-full overflow-hidden bg-stone-900 bg-cover bg-center"
       style={{
-        backgroundImage: "url('https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=2000&q=80')",
+        backgroundImage: `url('${heroBg}')`,
       }}
     >
-      {/* Background Video with Error Handling and Poster Fallback */}
-      {!videoError && (
+      {/* Background Video (desktop only — skipped on mobile so phones load a
+          single light image instead of a multi-MB autoplay video). */}
+      {!isMobile && !videoError && (
         <video
           className="absolute inset-0 w-full h-full object-cover z-0 opacity-80"
-          poster="https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=2000&q=80"
+          poster={heroBg}
           autoPlay
           muted
           loop
           playsInline
+          preload="none"
           onError={() => setVideoError(true)}
         >
           <source src="https://cdn.coverr.co/videos/coverr-flying-over-a-mountain-range-5343/1080p.mp4" type="video/mp4" />
