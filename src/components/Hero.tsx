@@ -112,9 +112,20 @@ export function Hero() {
     AUD: { rate: 1.52, symbol: 'A$' },
   };
 
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const copyToClipboard = async (text: string, successMsg: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(successMsg);
+    } catch {
+      showToast('Copy failed — please select the link and copy it manually.');
+    }
   };
 
   const formatMoney = (amountInUSD: number) => {
@@ -531,6 +542,8 @@ Return ONLY a valid, raw JSON object matching this schema:
     const updated = [tripWithId, ...savedTrips.filter((t) => t.id !== itineraryId)];
     setSavedTrips(updated);
     localStorage.setItem('vandor_saved_trips', JSON.stringify(updated));
+    // Carry the id back so re-saving the same itinerary updates instead of duplicating
+    setCurrentItinerary(tripWithId);
 
     // Sync to Firebase Firestore for signed-in users (cross-device memory)
     if (user?.uid && user.provider !== 'guest') {
@@ -1606,10 +1619,7 @@ Return ONLY a valid, raw JSON object matching this schema:
                         />
                         <button
                           type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(shareUrl);
-                            showToast('Share link copied to clipboard!');
-                          }}
+                          onClick={() => copyToClipboard(shareUrl, 'Share link copied to clipboard!')}
                           className="px-3 py-1.5 bg-black text-white text-[11px] font-semibold rounded-full hover:bg-gray-800 transition-colors flex items-center gap-1 cursor-pointer flex-shrink-0"
                         >
                           <Copy className="w-3 h-3" /> Copy
@@ -1831,10 +1841,7 @@ Return ONLY a valid, raw JSON object matching this schema:
                         />
                         <button
                           type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(shareUrl);
-                            showToast('Share link copied to clipboard!');
-                          }}
+                          onClick={() => copyToClipboard(shareUrl, 'Share link copied to clipboard!')}
                           className="px-3 py-1.5 bg-black text-white text-[11px] font-semibold rounded-full hover:bg-gray-800 transition-colors flex items-center gap-1 cursor-pointer flex-shrink-0"
                         >
                           <Copy className="w-3 h-3" /> Copy
