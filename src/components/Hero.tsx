@@ -79,7 +79,9 @@ export function Hero() {
   // Share via link + Shared read-only view State
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
-  const [isSharedView, setIsSharedView] = useState(false);
+  const [isSharedView, setIsSharedView] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('trip')
+  );
 
   // Trip Architect Wizard State
   const [travelersCount, setTravelersCount] = useState<number>(2);
@@ -389,6 +391,11 @@ Generated with Vandor AI Travel Architect`;
   // Opens the Trip Architect Wizard Modal
   const handlePlanTrip = () => {
     setApiError(null);
+    // Require sign-in before planning (covers the shared read-only view too)
+    if (!user) {
+      setActiveModal('login');
+      return;
+    }
     if (!groqApiKey || !groqApiKey.trim()) {
       setApiError('Groq API Key required! Please enter your Groq API key to generate real AI travel itineraries.');
       setTempApiKey('');
@@ -563,6 +570,11 @@ Return ONLY a valid, raw JSON object matching this schema:
 
   const handleSaveCurrentItinerary = async () => {
     if (!currentItinerary) return;
+    // Saving requires sign-in (relevant when viewing a shared link logged out)
+    if (!user) {
+      setActiveModal('login');
+      return;
+    }
     const itineraryId = currentItinerary.id || `trip_${Date.now()}`;
     const tripWithId: ItineraryResult = { ...currentItinerary, id: itineraryId };
 
@@ -734,6 +746,72 @@ Return ONLY a valid, raw JSON object matching this schema:
     }
   };
 
+  // Login gate: the app cannot be used until the visitor signs in. Public
+  // shared itinerary links (?trip=...) are exempt so recipients can view them.
+  if (!user && !isSharedView) {
+    return (
+      <section
+        className="relative min-h-svh w-full overflow-hidden bg-stone-900 bg-cover bg-center flex items-center justify-center p-6"
+        style={{ backgroundImage: `url('${heroBg}')` }}
+      >
+        <div
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm z-0"
+          aria-hidden="true"
+        />
+
+        <div className="relative z-10 w-full max-w-md bg-white/95 backdrop-blur-xl border border-white rounded-3xl p-8 shadow-2xl text-center animate-fade-in">
+          <span className="font-display text-4xl text-black">vandor</span>
+          <h1 className="text-xl font-semibold text-wandor-text mt-4">Sign in to start planning</h1>
+          <p className="text-xs text-wandor-muted mt-1 mb-6">
+            Vandor is available to signed-in explorers. Sign in to generate itineraries,
+            add your Groq API key, and save trips to your memory.
+          </p>
+
+          {authError && (
+            <div className="p-3 mb-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+              {authError}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              className="w-full py-3.5 px-4 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 font-medium text-xs text-gray-800 shadow-sm transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-95"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              Continue with Google
+            </button>
+
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-gray-200"></div>
+              <span className="flex-shrink mx-2 text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Or</span>
+              <div className="flex-grow border-t border-gray-200"></div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGuestLogin}
+              className="w-full py-3 px-4 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 font-medium text-xs text-gray-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+            >
+              <User className="w-4 h-4 text-gray-500" />
+              Continue as Guest Explorer
+            </button>
+
+            <p className="text-[10px] text-gray-400 pt-1">
+              Authenticated securely via Firebase Authentication or a local guest session.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       className="relative min-h-svh w-full overflow-hidden bg-stone-900 bg-cover bg-center"
@@ -770,39 +848,45 @@ Return ONLY a valid, raw JSON object matching this schema:
       {/* Content Wrapper */}
       <div className="relative z-[2] max-w-[1360px] mx-auto min-h-svh flex flex-col justify-between">
         {/* Navigation Bar */}
-        <nav className="flex items-center justify-between px-20 pt-6 pb-4 max-md:px-6 max-md:pt-5 relative">
+        <nav className="flex items-center justify-between gap-4 px-6 lg:px-10 xl:px-16 pt-6 pb-4 max-md:pt-5 relative">
           {/* Left Wordmark */}
           <span className="font-display text-[40px] max-md:text-[32px] text-black leading-none select-none">
             vandor
           </span>
 
-          {/* Center Links Group */}
-          <div className="absolute left-1/2 -translate-x-1/2 flex gap-8 max-md:hidden">
+          {/* Center Links Group — in normal flow (flex-1, centered) so it can
+              never overlap the wordmark or the right group at any width. Shown
+              at lg+; below that the links live in the compact menu. */}
+          <div className="hidden lg:flex flex-1 justify-center gap-8">
             <NavButton onClick={() => setActiveModal('discover')}>Discover</NavButton>
             <NavButton onClick={() => setActiveModal('pricing')}>Pricing</NavButton>
             <NavButton onClick={() => setActiveModal('faqs')}>FAQs</NavButton>
           </div>
 
           {/* Right Group: Groq Key Indicator + Auth Profile + CTA */}
-          <div className="flex items-center gap-4 max-md:gap-2">
-            {/* Groq Key Badge (compact on mobile: icon + status dot only) */}
+          <div className="flex items-center gap-4 max-lg:gap-2">
+            {/* Groq Key Badge (compact below lg: icon + status dot only) */}
             <button
               type="button"
               onClick={() => {
+                if (!user) {
+                  setActiveModal('login');
+                  return;
+                }
                 setTempApiKey(groqApiKey);
                 setActiveModal('groqKey');
               }}
-              className="flex items-center gap-2 px-3.5 py-1.5 max-md:px-2 max-md:py-2 rounded-full text-xs font-medium bg-white/80 backdrop-blur-md border border-gray-200/90 shadow-sm hover:bg-white hover:border-gray-300 transition-all text-gray-800 cursor-pointer active:scale-95"
+              className="flex items-center gap-2 px-3.5 py-1.5 max-lg:px-2 max-lg:py-2 rounded-full text-xs font-medium bg-white/80 backdrop-blur-md border border-gray-200/90 shadow-sm hover:bg-white hover:border-gray-300 transition-all text-gray-800 cursor-pointer active:scale-95"
               title="Groq AI Engine Status & Key Settings"
               aria-label="Groq AI engine status and key settings"
             >
-              <Key className={`w-3.5 h-3.5 hidden max-md:block ${groqApiKey ? 'text-emerald-600' : 'text-amber-600'}`} />
+              <Key className={`w-3.5 h-3.5 hidden max-lg:block ${groqApiKey ? 'text-emerald-600' : 'text-amber-600'}`} />
               <span className="relative flex h-2 w-2">
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${groqApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${groqApiKey ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
               </span>
-              <span className="font-semibold tracking-tight text-[12px] text-gray-800 max-md:hidden">{groqApiKey ? 'Groq Llama 3.3' : 'Groq API Key'}</span>
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border max-md:hidden ${
+              <span className="font-semibold tracking-tight text-[12px] text-gray-800 max-lg:hidden">{groqApiKey ? 'Groq Llama 3.3' : 'Groq API Key'}</span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border max-lg:hidden ${
                 groqApiKey
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -811,8 +895,8 @@ Return ONLY a valid, raw JSON object matching this schema:
               </span>
             </button>
 
-            {/* Mobile Menu (Discover / Pricing / FAQs / Login) */}
-            <div className="relative md:hidden">
+            {/* Compact Menu (Discover / Pricing / FAQs / Login) — below lg */}
+            <div className="relative lg:hidden">
               <button
                 type="button"
                 onClick={() => setShowMobileMenu((v) => !v)}
@@ -896,7 +980,7 @@ Return ONLY a valid, raw JSON object matching this schema:
               <button
                 type="button"
                 onClick={() => setActiveModal('login')}
-                className="bg-transparent border-none cursor-pointer font-sans text-[15px] font-semibold uppercase text-[#292929] tracking-[0.04em] transition-opacity hover:opacity-55 max-md:hidden"
+                className="bg-transparent border-none cursor-pointer font-sans text-[15px] font-semibold uppercase text-[#292929] tracking-[0.04em] transition-opacity hover:opacity-55 hidden lg:inline"
               >
                 Login
               </button>
